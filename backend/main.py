@@ -3,7 +3,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from backend.models import AnalysisResponse, NutritionInfo, ChatRequest
 from backend.integration import FitnessIntegration
 from backend.firebase_utils import db
-from ai_core.gemini_client import analyze_food_image, generate_text
+from ai_core.gemini_client import analyze_food_image, generate_text, analyze_audio
 # from ai_core.openai_client import analyze_food_image
 # from ai_core.groq_client import analyze_food_image
 import shutil
@@ -236,6 +236,47 @@ async def chat_with_ai(user_id: str, request: ChatRequest):
             f.write(traceback.format_exc())
         print(f"❌ NutriChat Error: {e}")
         raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+
+@app.post("/voice_chat/{user_id}")
+async def voice_chat_with_ai(user_id: str, file: UploadFile = File(...)):
+    """
+    Handles audio recording and returns AI response.
+    """
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not initialized")
+        
+    try:
+        # 1. Read audio bytes
+        audio_bytes = await file.read()
+        
+        # 2. Fetch recent history for context (simplified)
+        logs_ref = db.collection(u'food_logs')
+        docs = logs_ref.where(u'user_id', u'==', user_id).limit(5).stream()
+        history_context = []
+        for doc in docs:
+            data = doc.to_dict()
+            food_name = data.get('food_name', 'Unknown')
+            history_context.append(food_name)
+        
+        context_str = ", ".join(history_context) if history_context else "No meals logged yet."
+        
+        # 3. Build prompt for audio context
+        prompt = f"""
+        You are NutriVoice, an AI health assistant.
+        User's recent food history: {context_str}
+        
+        Listen to the audio and respond helpfully and concisely.
+        If they ask about their history, refer to the data provided above.
+        """
+        
+        # 4. Analyze Audio
+        ai_response = analyze_audio(audio_bytes, mime_type=file.content_type, prompt=prompt)
+        
+        return {"response": ai_response}
+
+    except Exception as e:
+        print(f"❌ NutriVoice Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Voice processing failed: {str(e)}")
 
 # Ensure firestore is imported for DESCENDING
 from firebase_admin import firestore

@@ -99,3 +99,40 @@ def generate_text(prompt):
             print(f"❌ NutriChat {model_name} Fail: {e}")
             
     return "I'm sorry, I'm having trouble connecting to my AI brain right now. Please try again in a moment."
+
+def analyze_audio(audio_bytes, mime_type="audio/wav", prompt=""):
+    """
+    Directly processes audio bytes with Gemini 1.5.
+    """
+    load_dotenv(override=True)
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        return "Error: No API Key"
+        
+    genai.configure(api_key=api_key)
+    
+    # Dynamically find available models
+    try:
+        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        models_to_try = [m for m in models if 'flash' in m.lower()] + [m for m in models if 'pro' in m.lower()]
+    except:
+        models_to_try = ['models/gemini-1.5-flash', 'gemini-1.5-pro-002']
+
+    for model_name in models_to_try:
+        try:
+            print(f"🎙️ NutriVoice trying: {model_name}")
+            model = genai.GenerativeModel(model_name)
+            
+            # Form multi-modal request
+            response = model.generate_content([
+                prompt,
+                {
+                    "mime_type": mime_type,
+                    "data": audio_bytes
+                }
+            ])
+            return response.text.strip()
+        except Exception as e:
+            print(f"❌ NutriVoice {model_name} Fail: {e}")
+            
+    return "I couldn't hear you clearly. Could you please try recording again or typing your request?"

@@ -178,9 +178,25 @@ else:
         st.divider()
 
 # --- CHAT SECTION ---
-with st.expander("💬 NutriChat: Ask your Nutritionist", expanded=False):
+with st.expander("💬 NutriChat: Ask your Nutritionist", expanded=True):
     if "messages" not in st.session_state:
         st.session_state.messages = []
+
+    # Voice Input (Premium Feature)
+    audio_file = st.audio_input("Record a voice message 🎙️")
+    if audio_file:
+        with st.spinner("AI is listening..."):
+            try:
+                files = {"file": (audio_file.name, audio_file.getvalue(), audio_file.type)}
+                res = requests.post(f"{BACKEND_URL}/voice_chat/{user_id}", files=files)
+                if res.status_code == 200:
+                    answer = res.json()["response"]
+                    st.session_state.messages.append({"role": "user", "content": "🎤 (Voice Message)"})
+                    st.session_state.messages.append({"role": "assistant", "content": answer})
+                else:
+                    st.error("Voice processing failed.")
+            except Exception as e:
+                st.error(f"Voice Error: {e}")
 
     # Display chat messages
     for message in st.session_state.messages:
