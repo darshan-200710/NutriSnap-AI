@@ -74,3 +74,43 @@ async def analyze_food(file: UploadFile = File(...), user_id: str = "demo_user")
         message=final_message,
         fitness_sync_status=sync_result
     )
+
+@app.get("/history/{user_id}")
+async def get_history(user_id: str):
+    """
+    Fetches food history for a specific user from Firebase.
+    """
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not initialized")
+        
+    try:
+        logs_ref = db.collection(u'food_logs')
+        query = logs_ref.where(u'user_id', u'==', user_id).order_by(u'timestamp', direction=firestore.Query.DESCENDING).limit(10)
+        docs = query.stream()
+        
+        history = []
+        for doc in docs:
+            log_data = doc.to_dict()
+            # Convert datetime to string for JSON serialization
+            if 'timestamp' in log_data and log_data['timestamp']:
+                log_data['timestamp'] = log_data['timestamp'].isoformat()
+            history.append(log_data)
+            
+        return {"user_id": user_id, "history": history}
+    except Exception as e:
+        print(f"Error fetching history: {e}")
+        # Fallback if index is not created yet (Firestore requires indexes for where + order_by)
+        try:
+            docs = logs_ref.where(u'user_id', u'==', user_id).limit(10).stream()
+            history = []
+            for doc in docs:
+                log_data = doc.to_dict()
+                if 'timestamp' in log_data and log_data['timestamp']:
+                    log_data['timestamp'] = log_data['timestamp'].isoformat()
+                history.append(log_data)
+            return {"user_id": user_id, "history": history, "note": "Simple query used (no ordering)"}
+        except:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch history: {str(e)}")
+
+# Ensure firestore is imported for DESCENDING
+from firebase_admin import firestore
