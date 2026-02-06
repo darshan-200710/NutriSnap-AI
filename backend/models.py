@@ -18,7 +18,6 @@ class AnalysisResponse(BaseModel):
     nutrition: NutritionInfo
     message: str
     fitness_sync_status: Optional[Dict] = None
-    log_id: Optional[str] = None
 
 class ChatRequest(BaseModel):
     message: str

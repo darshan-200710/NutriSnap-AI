@@ -9,6 +9,7 @@ from ai_core.gemini_client import analyze_food_image, generate_text, analyze_aud
 import shutil
 import os
 from datetime import datetime
+from firebase_admin import firestore
 
 app = FastAPI(title="Food Vision API")
 
@@ -43,11 +44,10 @@ async def analyze_food(file: UploadFile = File(...), user_id: str = "demo_user")
     # 3. Store in Firebase
 
     
-    log_id = None
+    # 3. Store in Firebase
     try:
         if db:
             doc_ref = db.collection(u'food_logs').document()
-            log_id = doc_ref.id
             doc_ref.set({
                 u'user_id': user_id,
                 u'food_name': nutrition_info.food_name,
@@ -73,8 +73,7 @@ async def analyze_food(file: UploadFile = File(...), user_id: str = "demo_user")
     return AnalysisResponse(
         nutrition=nutrition_info,
         message=final_message,
-        fitness_sync_status=sync_result,
-        log_id=log_id
+        fitness_sync_status=sync_result
     )
 
 @app.get("/history/{user_id}")
@@ -113,21 +112,6 @@ async def get_history(user_id: str):
             return {"user_id": user_id, "history": history, "note": "Simple query used (no ordering)"}
         except:
             raise HTTPException(status_code=500, detail=f"Failed to fetch history: {str(e)}")
-
-@app.get("/meal/{log_id}")
-async def get_meal(log_id: str):
-    """
-    Fetches a specific food log by ID.
-    """
-    if not db:
-        raise HTTPException(status_code=503, detail="Database not initialized")
-    try:
-        doc = db.collection(u'food_logs').document(log_id).get()
-        if not doc.exists:
-            raise HTTPException(status_code=404, detail="Meal log not found")
-        return doc.to_dict()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching meal: {str(e)}")
 
 @app.get("/coach/{user_id}")
 async def get_coaching(user_id: str):
@@ -244,14 +228,36 @@ async def chat_with_ai(user_id: str, request: ChatRequest):
         """
         
         ai_response = generate_text(prompt)
+        
+        # 3. Store in Firebase
+        try:
+            chat_ref = db.collection(u'chats').document()
+            chat_ref.set({
+                u'user_id': user_id,
+                u'role': u'user',
+                u'content': request.message,
+                u'timestamp': datetime.now()
+            })
+            chat_ref_ai = db.collection(u'chats').document()
+            chat_ref_ai.set({
+                u'user_id': user_id,
+                u'role': u'assistant',
+                u'content': ai_response,
+                u'timestamp': datetime.now()
+            })
+        except Exception as e:
+            print(f"Error saving chat to Firestore: {e}")
+
         return {"response": ai_response}
 
     except Exception as e:
         import traceback
+        error_msg = traceback.format_exc()
         with open("chat_error.log", "a") as f:
             f.write(f"\n--- Chat Error at {datetime.now()} ---\n")
-            f.write(traceback.format_exc())
+            f.write(error_msg)
         print(f"❌ NutriChat Error: {e}")
+        print(error_msg) # Print to console too
         raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
 
 @app.post("/voice_chat/{user_id}")
@@ -289,11 +295,65 @@ async def voice_chat_with_ai(user_id: str, file: UploadFile = File(...)):
         # 4. Analyze Audio
         ai_response = analyze_audio(audio_bytes, mime_type=file.content_type, prompt=prompt)
         
+        # 5. Store in Firebase
+        try:
+            chat_ref = db.collection(u'chats').document()
+            chat_ref.set({
+                u'user_id': user_id,
+                u'role': u'user',
+                u'content': u"🎤 (Voice Message)",
+                u'timestamp': datetime.now()
+            })
+            chat_ref_ai = db.collection(u'chats').document()
+            chat_ref_ai.set({
+                u'user_id': user_id,
+                u'role': u'assistant',
+                u'content': ai_response,
+                u'timestamp': datetime.now()
+            })
+        except Exception as e:
+            print(f"Error saving voice chat to Firestore: {e}")
+
         return {"response": ai_response}
 
     except Exception as e:
         print(f"❌ NutriVoice Error: {e}")
         raise HTTPException(status_code=500, detail=f"Voice processing failed: {str(e)}")
 
-# Ensure firestore is imported for DESCENDING
-from firebase_admin import firestore
+@app.get("/chats/{user_id}")
+async def get_chats(user_id: str):
+    """
+    Fetches chat history for a specific user.
+    """
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not initialized")
+        
+    try:
+        chats_ref = db.collection(u'chats')
+        # Ordering by timestamp to get correct flow
+        docs = chats_ref.where(u'user_id', u'==', user_id).order_by(u'timestamp', direction=firestore.Query.ASCENDING).stream()
+        
+        history = []
+        for doc in docs:
+            chat_data = doc.to_dict()
+            history.append({
+                "role": chat_data.get("role"),
+                "content": chat_data.get("content")
+            })
+        return {"user_id": user_id, "history": history}
+    except Exception as e:
+        print(f"Error fetching chats: {e}")
+        # Fallback without ordering
+        try:
+            docs = chats_ref.where(u'user_id', u'==', user_id).limit(20).stream()
+            history = []
+            for doc in docs:
+                chat_data = doc.to_dict()
+                history.append({
+                    "role": chat_data.get("role"),
+                    "content": chat_data.get("content")
+                })
+            return {"user_id": user_id, "history": history}
+        except:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch chats: {str(e)}")
+
