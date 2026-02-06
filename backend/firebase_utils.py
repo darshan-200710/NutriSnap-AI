@@ -11,14 +11,20 @@ def initialize_firebase():
     
     if not firebase_admin._apps:
         if os.path.exists(cred_path):
-            cred = credentials.Certificate(cred_path)
-            firebase_admin.initialize_app(cred)
-            print(f"Firebase initialized with credentials from {cred_path}")
+            try:
+                cred = credentials.Certificate(cred_path)
+                firebase_admin.initialize_app(cred)
+                print(f"✅ Firebase initialized successfully with {cred_path}")
+            except Exception as e:
+                print(f"❌ Firebase initialization failed: {e}")
+                return None
         else:
-            print(f"WARNING: {cred_path} not found. Firebase not initialized.")
+            print(f"⚠️ WARNING: {cred_path} not found. Firebase not initialized.")
             return None
             
-    return firestore.client()
+    client = firestore.client()
+    print("🔥 Firestore client connected.")
+    return client
 
 # Initialize on module load or create a singleton
 db = initialize_firebase()
