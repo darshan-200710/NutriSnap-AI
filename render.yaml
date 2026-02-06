@@ -6,6 +6,8 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn -k uvicorn.workers.UvicornWorker main:app --bind 0.0.0.0:$PORT
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
       - key: GOOGLE_API_KEY
         sync: false
       - key: FIREBASE_CREDENTIALS_PATH
@@ -18,8 +20,10 @@ services:
     buildCommand: pip install -r requirements-frontend.txt
     startCommand: streamlit run frontend/app.py --server.port $PORT --server.address 0.0.0.0
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
       - key: BACKEND_URL
         fromService:
           name: nutrisnap-backend
           type: web
-          property: host
+          property: url

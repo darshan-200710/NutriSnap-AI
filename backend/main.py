@@ -6,12 +6,20 @@ from backend.firebase_utils import db
 from ai_core.gemini_client import analyze_food_image, generate_text, analyze_audio
 # from ai_core.openai_client import analyze_food_image
 # from ai_core.groq_client import analyze_food_image
+from fastapi.middleware.cors import CORSMiddleware
 import shutil
 import os
-from datetime import datetime
-from firebase_admin import firestore
 
 app = FastAPI(title="Food Vision API")
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # In production, you might want to specify the frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def read_root():
