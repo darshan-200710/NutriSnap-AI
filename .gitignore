@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+serviceAccountKey.json
+*-firebase-adminsdk-*.json
+.DS_Store
+test_*.py
+list_models.py
+models.txt
