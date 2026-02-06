@@ -58,6 +58,26 @@ with st.sidebar:
     
     if st.button("Refresh History 🔄"):
         st.cache_data.clear()
+        
+    st.divider()
+    st.markdown("### 🤖 AI Health Coach")
+    if st.button("Consult AI Coach 🧠"):
+        with st.spinner("Analyzing your habits..."):
+            try:
+                coach_res = requests.get(f"{BACKEND_URL}/coach/{user_id}")
+                if coach_res.status_code == 200:
+                    st.session_state.coach_data = coach_res.json()
+                else:
+                    st.error("Coach is busy currently.")
+            except:
+                st.error("Coach connection failed.")
+                
+    if "coach_data" in st.session_state:
+        coach = st.session_state.coach_data
+        st.info(f"💡 **Insight:** {coach.get('insight')}")
+        st.markdown("**Suggestions for Next Meal:**")
+        for sug in coach.get('suggestions', []):
+            st.write(f"✅ {sug}")
 
 # Main Content
 col1, col2 = st.columns(2)
