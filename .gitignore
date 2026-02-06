@@ -8,6 +8,11 @@ venv/
 serviceAccountKey.json
 *-firebase-adminsdk-*.json
 .DS_Store
+*.log
 test_*.py
 list_models.py
-models.txt
+restore_key.py
+*.txt
+!requirements.txt
+!requirements-frontend.txt
+!README.md
