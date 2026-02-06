@@ -3,11 +3,59 @@ import requests
 from PIL import Image
 import json
 from datetime import datetime
+import qrcode
+import io
 
 # CONFIG
 BACKEND_URL = "http://localhost:8000"
 
+# --- MOBILE VIEW HANDLER ---
+if "meal_id" in st.query_params:
+    meal_id = st.query_params["meal_id"]
+    st.set_page_config(page_title="NutriScan Share", layout="centered")
+    
+    # Custom CSS for Mobile View
+    st.markdown("""
+        <style>
+        .main { background-color: #0a0f0a; color: white; font-family: sans-serif; }
+        .stMetric { background: #161b16; padding: 15px; border-radius: 15px; border: 1px solid #333; }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    try:
+        res = requests.get(f"{BACKEND_URL}/meal/{meal_id}")
+        if res.status_code == 200:
+            meal = res.json()
+            nutrition = meal.get("nutrition", {})
+            st.title("🥗 NutriScan Share")
+            st.markdown(f"### {meal.get('food_name')}")
+            st.divider()
+            
+            c1, c2 = st.columns(2)
+            c1.metric("Calories", f"{meal.get('calories')} kcal")
+            c2.metric("Protein", f"{nutrition.get('protein_g')}g")
+            
+            c3, c4 = st.columns(2)
+            c3.metric("Carbs", f"{nutrition.get('carbs_g')}g")
+            c4.metric("Fats", f"{nutrition.get('fats_g')}g")
+            
+            st.info("Log your own meals at NutriScan AI!")
+        else:
+            st.error("Meal not found.")
+    except:
+        st.error("Could not fetch healthy data.")
+    st.stop()
+
 st.set_page_config(page_title="NutriScan AI", layout="wide", initial_sidebar_state="collapsed")
+
+def generate_qr(url):
+    qr = qrcode.QRCode(version=1, box_size=10, border=4)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
 
 # Custom CSS for NutriScan Aesthetic
 st.markdown("""
@@ -224,17 +272,34 @@ with col_side:
 
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Continue on Mobile Mockup
-    st.markdown("""
+    # Continue on Mobile Section
+    qr_data = None
+    if "last_analysis" in st.session_state:
+        log_id = st.session_state.last_analysis.get("log_id")
+        if log_id:
+            # We assume the app is running somewhere accessible
+            # For hackathon, we can use a placeholder or try to infer
+            # In production, this would be the actual Render URL
+            app_url = "https://nutriscan-ai.streamlit.app" # Placeholder / Target URL
+            share_url = f"{app_url}?meal_id={log_id}"
+            qr_data = generate_qr(share_url)
+
+    st.markdown(f"""
         <div style="background: #111; padding: 20px; border-radius: 20px; border: 1px solid #222;">
             <div style="color: #8ed600; font-size: 24px; margin-bottom: 10px;">📱</div>
             <div style="font-weight: 800; font-size: 18px;">Continue on Mobile</div>
             <div style="color: #666; font-size: 13px; margin-top: 5px;">Scan this QR code to seamlessly continue your nutrition tracking on the go.</div>
-            <div style="background: white; width: 100px; height: 100px; margin: 20px auto; border-radius: 10px; display: flex; align-items: center; justify-content: center;">
-                <span style="color: black; font-weight: 800; font-size: 10px;">[QR CODE]</span>
-            </div>
         </div>
     """, unsafe_allow_html=True)
+    
+    if qr_data:
+        st.image(qr_data, caption="Scan to view on Mobile", width=200)
+    else:
+        st.markdown("""
+            <div style="background: white; width: 100px; height: 100px; margin: 20px auto; border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                <span style="color: black; font-weight: 800; font-size: 10px;">[ANALYZE FOOD TO SEE QR]</span>
+            </div>
+        """, unsafe_allow_html=True)
 
 # Recognition Results Overlay (if analyzed)
 if "last_analysis" in st.session_state:

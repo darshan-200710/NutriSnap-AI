@@ -43,10 +43,11 @@ async def analyze_food(file: UploadFile = File(...), user_id: str = "demo_user")
     # 3. Store in Firebase
 
     
-    # 3. Store in Firebase
+    log_id = None
     try:
         if db:
             doc_ref = db.collection(u'food_logs').document()
+            log_id = doc_ref.id
             doc_ref.set({
                 u'user_id': user_id,
                 u'food_name': nutrition_info.food_name,
@@ -72,7 +73,8 @@ async def analyze_food(file: UploadFile = File(...), user_id: str = "demo_user")
     return AnalysisResponse(
         nutrition=nutrition_info,
         message=final_message,
-        fitness_sync_status=sync_result
+        fitness_sync_status=sync_result,
+        log_id=log_id
     )
 
 @app.get("/history/{user_id}")
@@ -111,6 +113,21 @@ async def get_history(user_id: str):
             return {"user_id": user_id, "history": history, "note": "Simple query used (no ordering)"}
         except:
             raise HTTPException(status_code=500, detail=f"Failed to fetch history: {str(e)}")
+
+@app.get("/meal/{log_id}")
+async def get_meal(log_id: str):
+    """
+    Fetches a specific food log by ID.
+    """
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not initialized")
+    try:
+        doc = db.collection(u'food_logs').document(log_id).get()
+        if not doc.exists:
+            raise HTTPException(status_code=404, detail="Meal log not found")
+        return doc.to_dict()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching meal: {str(e)}")
 
 @app.get("/coach/{user_id}")
 async def get_coaching(user_id: str):
