@@ -1,9 +1,9 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 # Force reload to pick up new .env changes
-from backend.models import AnalysisResponse, NutritionInfo
+from backend.models import AnalysisResponse, NutritionInfo, ChatRequest
 from backend.integration import FitnessIntegration
 from backend.firebase_utils import db
-from ai_core.gemini_client import analyze_food_image
+from ai_core.gemini_client import analyze_food_image, generate_text
 # from ai_core.openai_client import analyze_food_image
 # from ai_core.groq_client import analyze_food_image
 import shutil
@@ -159,19 +159,11 @@ async def get_coaching(user_id: str):
         }}
         """
         
-        from ai_core.gemini_client import genai
         import json
-        
-        # ensure env is loaded
-        from dotenv import load_dotenv
-        load_dotenv(override=True)
-        genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-        
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(prompt)
+        text_response = generate_text(prompt)
         
         # Clean and parse JSON
-        text_response = response.text.replace("```json", "").replace("```", "").strip()
+        text_response = text_response.replace("```json", "").replace("```", "").strip()
         result = json.loads(text_response)
         
         return result
@@ -190,6 +182,60 @@ async def get_coaching(user_id: str):
                 "insight": "I'm having a bit of trouble analyzing your data right now, but keep up the great work logging your meals!",
                 "suggestions": ["Continue tracking your food", "Stay hydrated", "Aim for variety in your diet"]
             }
+
+@app.post("/chat/{user_id}")
+async def chat_with_ai(user_id: str, request: ChatRequest):
+    """
+    Interactive chat with AI about nutrition and food history.
+    """
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not initialized")
+        
+    try:
+        # 1. Fetch recent history for context
+        logs_ref = db.collection(u'food_logs')
+        try:
+            docs = logs_ref.where(u'user_id', u'==', user_id).order_by(u'timestamp', direction=firestore.Query.DESCENDING).limit(5).stream()
+            history_context = []
+            for doc in docs:
+                data = doc.to_dict()
+                food_name = data.get('food_name', 'Unknown')
+                calories = data.get('calories', 0)
+                history_context.append(f"{food_name} ({calories} kcal)")
+        except Exception as e:
+            print(f"Firestore ordered query failed (likely missing index): {e}")
+            # Fallback to simple query
+            docs = logs_ref.where(u'user_id', u'==', user_id).limit(5).stream()
+            history_context = []
+            for doc in docs:
+                data = doc.to_dict()
+                food_name = data.get('food_name', 'Unknown')
+                calories = data.get('calories', 0)
+                history_context.append(f"{food_name} ({calories} kcal)")
+            
+        context_str = ", ".join(history_context) if history_context else "No meals logged yet."
+
+        # 2. Build prompt
+        prompt = f"""
+        You are NutriChat, an AI health assistant.
+        User's recent food history: {context_str}
+        
+        User's question: {request.message}
+        
+        Provide a helpful, concise response. If they ask about their history, refer to the data provided above.
+        Be scientific but friendly.
+        """
+        
+        ai_response = generate_text(prompt)
+        return {"response": ai_response}
+
+    except Exception as e:
+        import traceback
+        with open("chat_error.log", "a") as f:
+            f.write(f"\n--- Chat Error at {datetime.now()} ---\n")
+            f.write(traceback.format_exc())
+        print(f"❌ NutriChat Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
 
 # Ensure firestore is imported for DESCENDING
 from firebase_admin import firestore

@@ -69,3 +69,33 @@ def analyze_food_image(image_path):
             
     # If we exit loop, all failed
     return {"error": f"All models failed. Last error: {str(last_error)}"}
+
+def generate_text(prompt):
+    """
+    Sends text prompt to Gemini and returns string response.
+    """
+    load_dotenv(override=True)
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        return "Error: No API Key"
+        
+    genai.configure(api_key=api_key)
+    
+    # Dynamically find available text models
+    try:
+        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # Prioritize flash
+        models_to_try = [m for m in models if 'flash' in m.lower()] + [m for m in models if 'pro' in m.lower()]
+    except:
+        models_to_try = ['models/gemini-1.5-flash', 'gemini-1.5-flash', 'models/gemini-1.5-pro']
+
+    for model_name in models_to_try:
+        try:
+            print(f"🤖 NutriChat trying: {model_name}")
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            return response.text.strip()
+        except Exception as e:
+            print(f"❌ NutriChat {model_name} Fail: {e}")
+            
+    return "I'm sorry, I'm having trouble connecting to my AI brain right now. Please try again in a moment."

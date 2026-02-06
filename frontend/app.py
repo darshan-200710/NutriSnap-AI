@@ -176,3 +176,33 @@ else:
                 except:
                     st.caption(ts)
         st.divider()
+
+# --- CHAT SECTION ---
+with st.expander("💬 NutriChat: Ask your Nutritionist", expanded=False):
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # Display chat messages
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # React to user input
+    if prompt := st.chat_input("Ask about your diet..."):
+        # Display user message in chat message container
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # Display assistant response in chat message container
+        with st.chat_message("assistant"):
+            try:
+                response = requests.post(f"{BACKEND_URL}/chat/{user_id}", json={"message": prompt})
+                if response.status_code == 200:
+                    answer = response.json()["response"]
+                    st.markdown(answer)
+                    st.session_state.messages.append({"role": "assistant", "content": answer})
+                else:
+                    st.error("AI is thinking hard... try again later.")
+            except:
+                st.error("Connection lost.")
