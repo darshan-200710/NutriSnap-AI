@@ -21,9 +21,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/health")
+def health_check():
+    """Diagnostic endpoint for deployment debugging."""
+    return {
+        "status": "online",
+        "database": "connected" if db else "missing_credentials",
+        "ai_key": "configured" if os.getenv("GOOGLE_API_KEY") else "missing",
+        "env_vars": {
+            "FIREBASE_CREDENTIALS_PATH": os.getenv("FIREBASE_CREDENTIALS_PATH", "default"),
+            "GOOGLE_API_KEY_PRESENT": bool(os.getenv("GOOGLE_API_KEY")),
+            "BACKEND_URL_EXTERNAL": os.getenv("RENDER_EXTERNAL_URL", "not_set")
+        }
+    }
+
 @app.get("/")
 def read_root():
-    return {"status": "online", "message": "Food Vision Backend is Running"}
+    return {"status": "online", "message": "Food Vision Backend is Running. Visit /health for diagnostics."}
 
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_food(file: UploadFile = File(...), user_id: str = "demo_user"):
